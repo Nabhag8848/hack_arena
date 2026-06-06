@@ -19,18 +19,24 @@ MAX_INTERACTIONS = int(os.environ.get("MAX_INTERACTIONS", "60"))
 MAX_TASKS = int(os.environ.get("MAX_TASKS", "0"))
 SKIP_COMPLETED = os.environ.get("SKIP_COMPLETED", "1") == "1"
 
-# --- LLM (Groq) ---
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
-DEFAULT_MODEL = "llama-3.3-70b-versatile"
+# --- LLM (OpenRouter — https://openrouter.ai/keys) ---
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
+OPENROUTER_BASE_URL = os.environ.get(
+    "OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"
+)
+OPENROUTER_HTTP_REFERER = os.environ.get("OPENROUTER_HTTP_REFERER", "")
+OPENROUTER_APP_TITLE = os.environ.get("OPENROUTER_APP_TITLE", "hack_agent_arena")
+# Auto-routes to an available free model; override in .env for a specific model
+DEFAULT_MODEL = "meta-llama/llama-3.3-70b-instruct:free"
 MODEL = os.environ.get("MODEL", DEFAULT_MODEL)
 
 
 def validate_llm_config() -> None:
-    """Fail fast before running tasks if Groq API key is not configured."""
-    if not GROQ_API_KEY.strip():
+    """Fail fast before running tasks if OpenRouter API key is not configured."""
+    if not OPENROUTER_API_KEY.strip():
         raise RuntimeError(
-            "GROQ_API_KEY is not set in .env.\n"
-            "  Get a key at https://console.groq.com/keys"
+            "OPENROUTER_API_KEY is not set in .env.\n"
+            "  Get a key at https://openrouter.ai/keys"
         )
 
 

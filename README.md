@@ -23,16 +23,19 @@ source .venv/bin/activate
 Then add your LLM key to **`.env`**:
 
 ```
-OPENAI_API_KEY=sk-...
+OPENROUTER_API_KEY=sk-or-...
+MODEL=meta-llama/llama-3.3-70b-instruct:free
 ```
+
+Get a free key at [openrouter.ai/keys](https://openrouter.ai/keys). The default model is
+**Llama 3.3 70B Instruct** (`meta-llama/llama-3.3-70b-instruct:free`) — free on OpenRouter.
+Other options: `openrouter/free` (auto-pick) or `qwen/qwen3-coder:free` (coding).
 
 > **No key? You can run a local model.** AppWorld itself needs no API key — you can
 > explore tasks (`appworld play`) and hand-solve them fully offline. Only the agent's
-> "brain" needs a model. The starter uses OpenAI by default, but `call_llm` in
-> `agent.py` is swappable: point it at any provider, including a local model via
-> [Ollama](https://ollama.com) (its OpenAI-compatible endpoint, or `litellm`). Small
-> local models score well below frontier models on AppWorld, but they're great for
-> building and debugging your agent loop for free.
+> "brain" needs a model. `call_llm` in `agent/llm.py` uses OpenRouter's OpenAI-compatible
+> API; point `OPENROUTER_BASE_URL` at [Ollama](https://ollama.com) or another compatible
+> endpoint if you prefer local inference.
 
 ## 2. Smoke-test the starter agent (2 tasks)
 

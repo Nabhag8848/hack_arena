@@ -29,7 +29,7 @@ cat <<'NEXT'
 
 ✅ Setup done. Next:
   source .venv/bin/activate
-  # Edit .env — set GROQ_API_KEY, APPWORLD_EXPERIMENT=team_<yourname>, HYDRA_DB_API_KEY (optional)
+  # Edit .env — set OPENROUTER_API_KEY, APPWORLD_EXPERIMENT=team_<yourname>, HYDRA_DB_API_KEY (optional)
   python agent.py                              # reads all settings from .env
 
 Explore tasks interactively:

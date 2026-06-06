@@ -13,9 +13,9 @@ if [[ -f .env ]]; then
   set +a
 fi
 
-if [[ -z "${GROQ_API_KEY:-}" ]]; then
-  echo "ERROR: GROQ_API_KEY is not set in .env"
-  echo "  Get a key at https://console.groq.com/keys"
+if [[ -z "${OPENROUTER_API_KEY:-}" ]]; then
+  echo "ERROR: OPENROUTER_API_KEY is not set in .env"
+  echo "  Get a key at https://openrouter.ai/keys"
   exit 1
 fi
 

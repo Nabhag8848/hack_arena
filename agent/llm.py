@@ -1,30 +1,60 @@
 import re
 import time
 
-from groq import APIStatusError, Groq, RateLimitError
+from openai import APIStatusError, OpenAI, RateLimitError
 
 from agent.config import (
     EXEC_TEMPERATURE,
-    GROQ_API_KEY,
     MAX_TOKENS,
     MODEL,
+    OPENROUTER_API_KEY,
+    OPENROUTER_APP_TITLE,
+    OPENROUTER_BASE_URL,
+    OPENROUTER_HTTP_REFERER,
     PLANNER_TEMPERATURE,
 )
 
-_client: Groq | None = None
+_client: OpenAI | None = None
 
 
-def _is_daily_quota_exhausted(exc: Exception) -> bool:
+def _is_quota_exhausted(exc: Exception) -> bool:
     msg = str(exc).lower()
-    return "tokens per day" in msg or "tpd" in msg
+    if any(s in msg for s in ("temporarily rate-limited", "retry shortly", "retry after")):
+        return False
+    return any(
+        s in msg
+        for s in ("tokens per day", "tpd", "insufficient credits", "quota exceeded")
+    )
 
 
-def get_client() -> Groq:
+def _retry_wait_seconds(exc: Exception, attempt: int) -> int:
+    msg = str(exc)
+    for pattern in (
+        r"'retry_after_seconds': (\d+)",
+        r"'Retry-After': '(\d+)'",
+        r"retry after (\d+) seconds",
+    ):
+        m = re.search(pattern, msg, re.I)
+        if m:
+            return int(m.group(1)) + 1
+    return 6 * (attempt + 1)
+
+
+def get_client() -> OpenAI:
     global _client
     if _client is None:
-        if not GROQ_API_KEY:
-            raise RuntimeError("GROQ_API_KEY is not set in .env")
-        _client = Groq(api_key=GROQ_API_KEY)
+        if not OPENROUTER_API_KEY:
+            raise RuntimeError("OPENROUTER_API_KEY is not set in .env")
+        headers: dict[str, str] = {}
+        if OPENROUTER_HTTP_REFERER:
+            headers["HTTP-Referer"] = OPENROUTER_HTTP_REFERER
+        if OPENROUTER_APP_TITLE:
+            headers["X-Title"] = OPENROUTER_APP_TITLE
+        _client = OpenAI(
+            base_url=OPENROUTER_BASE_URL,
+            api_key=OPENROUTER_API_KEY,
+            default_headers=headers or None,
+        )
     return _client
 
 
@@ -47,24 +77,24 @@ def call_llm(
             time.sleep(1)
             return content
         except RateLimitError as e:
-            if _is_daily_quota_exhausted(e):
+            if _is_quota_exhausted(e):
                 raise RuntimeError(
-                    "Groq daily token limit reached. Wait for reset or upgrade at "
-                    "https://console.groq.com/settings/billing"
+                    "OpenRouter rate/quota limit reached. Wait and retry or check "
+                    "https://openrouter.ai/settings/keys"
                 ) from e
             if attempt == 4:
                 raise
-            wait = 6 * (attempt + 1)
+            wait = _retry_wait_seconds(e, attempt)
             print(f"  [llm] rate limited, retrying in {wait}s...", flush=True)
             time.sleep(wait)
         except APIStatusError as e:
-            if e.status_code == 429 and _is_daily_quota_exhausted(e):
+            if e.status_code == 429 and _is_quota_exhausted(e):
                 raise RuntimeError(
-                    "Groq daily token limit reached. Wait for reset or upgrade at "
-                    "https://console.groq.com/settings/billing"
+                    "OpenRouter rate/quota limit reached. Wait and retry or check "
+                    "https://openrouter.ai/settings/keys"
                 ) from e
             if e.status_code == 429 and attempt < 4:
-                wait = 6 * (attempt + 1)
+                wait = _retry_wait_seconds(e, attempt)
                 print(f"  [llm] rate limited ({e.status_code}), retrying in {wait}s...", flush=True)
                 time.sleep(wait)
                 continue

@@ -1,4 +1,4 @@
 appworld
-groq
+openai
 python-dotenv
 hydradb-sdk>=2,<3

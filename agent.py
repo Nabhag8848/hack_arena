@@ -70,7 +70,7 @@ def main() -> None:
 
     print(
         f"Running '{APPWORLD_EXPERIMENT}' on {len(task_ids)} "
-        f"'{APPWORLD_DATASET}' tasks with groq/{MODEL}"
+        f"'{APPWORLD_DATASET}' tasks with openrouter/{MODEL}"
     )
     if SKIP_COMPLETED:
         print("SKIP_COMPLETED=1 — resuming past finished tasks", flush=True)
@@ -91,7 +91,7 @@ def main() -> None:
                 if solve(world):
                     completed += 1
         except RuntimeError as e:
-            if "daily token limit" in str(e).lower():
+            if "rate/quota limit" in str(e).lower() or "daily token limit" in str(e).lower():
                 print(f"  ! stopping run: {e}", flush=True)
                 break
             print(f"  ! error: {e}")
