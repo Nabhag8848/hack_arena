@@ -1,0 +1,20 @@
+# Secrets
+.env
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+
+# AppWorld runtime artifacts (downloaded / generated locally)
+.tmp/
+data/
+experiments/
+logs/
+
+# OS
+.DS_Store
