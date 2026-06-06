@@ -23,7 +23,13 @@ echo "[5/6] Creating .env (add your key)..."
 [ -f .env ] || cp .env.example .env
 
 echo "[6/6] Verify..."
-python -c "from appworld import load_task_ids; print('dev:', len(load_task_ids('dev')), '| test_normal:', len(load_task_ids('test_normal')))"
+# Official eval set (10 tasks) — see EVAL.md / SUBMISSION.md
+if [[ ! -f data/datasets/agent_arena_eval.txt ]]; then
+  if [[ -f data/datasets/agent_arena.txt ]]; then
+    cp data/datasets/agent_arena.txt data/datasets/agent_arena_eval.txt
+  fi
+fi
+python -c "from appworld import load_task_ids; print('dev:', len(load_task_ids('dev')), '| agent_arena_eval:', len(load_task_ids('agent_arena_eval')))"
 
 cat <<'NEXT'
 

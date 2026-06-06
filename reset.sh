@@ -47,5 +47,5 @@ cat <<EOF
   - .hydradb_seeded removed (API docs will re-seed on next run)
   - HydraDB tenant "$tenant" will be recreated on next agent run
 
-Next: bash run.sh smoke
+Next: bash run.sh smoke   # or: bash run.sh submit
 EOF

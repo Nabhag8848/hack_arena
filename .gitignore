@@ -14,8 +14,14 @@ __pycache__/
 
 # AppWorld runtime artifacts (downloaded / generated locally)
 .tmp/
-data/
-experiments/
+data/*
+!data/datasets/
+data/datasets/*
+!data/datasets/agent_arena_eval.txt
+experiments/*
+!experiments/outputs/
+experiments/outputs/*
+!experiments/outputs/team_*/
 logs/
 
 # OS

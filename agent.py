@@ -103,7 +103,11 @@ def main() -> None:
     output_dir = EXPERIMENTS_OUTPUT_DIR / APPWORLD_EXPERIMENT
     print(f"\nCompleted {completed}/{len(task_ids)} tasks ({skipped} skipped, {ran} attempted)")
     print(f"Outputs in {output_dir}/")
-    print("Hand that folder to the organizers (or zip and submit per instructions).")
+    if APPWORLD_DATASET == "agent_arena_eval":
+        print(f"Self-eval: appworld evaluate {APPWORLD_EXPERIMENT} agent_arena_eval")
+        print(f"Commit: {output_dir}/evaluations/agent_arena_eval.json + tasks/*/dbs/ (see SUBMISSION.md)")
+    else:
+        print(f"Evaluate: appworld evaluate {APPWORLD_EXPERIMENT} {APPWORLD_DATASET}")
 
 
 if __name__ == "__main__":

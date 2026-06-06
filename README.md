@@ -1,8 +1,14 @@
-# ://agent_arena
+# ://agent_arena — team_nabhag
 
 Build an **autonomous AI agent** that completes everyday-app tasks in
 [AppWorld](https://appworld.dev). You are ranked by **Task Goal Completion (TGC)** —
 the percentage of tasks your agent fully completes.
+
+|             |                                                                                       |
+| ----------- | ------------------------------------------------------------------------------------- |
+| **Team**    | `team_nabhag`                                                                         |
+| **Model**   | `meta-llama/llama-3.3-70b-instruct:free` (OpenRouter)                                 |
+| **HydraDB** | yes — API-doc retrieval + cross-task memory (ingest-only; see `agent/hydradb_ctx.py`) |
 
 ## What AppWorld is
 
@@ -25,30 +31,30 @@ Then add your LLM key to **`.env`**:
 ```
 OPENROUTER_API_KEY=sk-or-...
 MODEL=meta-llama/llama-3.3-70b-instruct:free
+APPWORLD_EXPERIMENT=team_nabhag
 ```
 
-Get a free key at [openrouter.ai/keys](https://openrouter.ai/keys). The default model is
-**Llama 3.3 70B Instruct** (`meta-llama/llama-3.3-70b-instruct:free`) — free on OpenRouter.
-Other options: `openrouter/free` (auto-pick) or `qwen/qwen3-coder:free` (coding).
+Get a free key at [openrouter.ai/keys](https://openrouter.ai/keys).
 
-> **No key? You can run a local model.** AppWorld itself needs no API key — you can
-> explore tasks (`appworld play`) and hand-solve them fully offline. Only the agent's
-> "brain" needs a model. `call_llm` in `agent/llm.py` uses OpenRouter's OpenAI-compatible
-> API; point `OPENROUTER_BASE_URL` at [Ollama](https://ollama.com) or another compatible
-> endpoint if you prefer local inference.
-
-## 2. Smoke-test the starter agent (2 tasks)
+## 2. Run the agent
 
 ```bash
-export APPWORLD_EXPERIMENT=team_<yourname>     # your UNIQUE team id
-export APPWORLD_DATASET=dev MAX_TASKS=2
-python agent.py
+bash run.sh smoke      # 2 tasks — quick check (~5-10 min)
+bash run.sh submit     # all 10 official eval tasks + self-evaluate (default)
+bash run.sh dev        # 57-task dev split (practice)
 ```
 
-`agent.py` is a working ReAct code agent — read it, then make it smarter
-(planning, error recovery, better prompts, retrieval over `apis.api_docs`, …).
+Or manually (see [SUBMISSION.md](SUBMISSION.md)):
 
-Explore a task world by hand: `appworld play`
+```bash
+export APPWORLD_EXPERIMENT=team_nabhag
+export APPWORLD_DATASET=agent_arena_eval MAX_TASKS=0
+python agent.py
+appworld evaluate team_nabhag agent_arena_eval
+```
+
+`agent.py` is a PRER (Plan-Retrieve-Execute-Reflect) code agent — read it, then
+make it smarter. Explore a task by hand: `appworld play`
 
 ## 3. The rules your agent plays by
 
@@ -59,28 +65,35 @@ Explore a task world by hand: `appworld play`
 - Get credentials: `apis.supervisor.show_account_passwords()`, then log into each app.
 - Finish a task: `apis.supervisor.complete_task(answer=<answer or None>)`.
 
-## 4. Submit (at each checkpoint)
+## 4. Submit
 
-1. Run your agent on the **official split** the organizers announce
-   (default `test_normal`, 168 tasks):
-   ```bash
-   export APPWORLD_DATASET=test_normal MAX_TASKS=0
-   python agent.py
-   ```
-2. Self-evaluate:
-   ```bash
-   appworld evaluate $APPWORLD_EXPERIMENT test_normal
-   ```
-3. Zip and submit your whole output folder:
-   `experiments/outputs/$APPWORLD_EXPERIMENT/`
-   It must include `evaluations/test_normal.json` and the `tasks/<id>/dbs/` folders.
+See [SUBMISSION.md](SUBMISSION.md) for the Google Form and full rules.
+
+**Required repo structure** after running `bash run.sh submit`:
+
+```
+├── README.md
+├── agent.py
+├── requirements.txt
+└── experiments/
+    └── outputs/
+        └── team_nabhag/
+            ├── evaluations/
+            │   └── agent_arena_eval.json   # REQUIRED
+            └── tasks/
+                └── <task_id>/…             # all 10 tasks + dbs/
+```
+
+Commit `experiments/outputs/team_nabhag/` (or zip and attach to a GitHub Release
+if too large — still keep `evaluations/agent_arena_eval.json` in the repo).
+
+Official eval tasks: [EVAL.md](EVAL.md)
 
 ## Scoring
 
-- **TGC** (primary) — % of tasks fully completed. **SGC** (scenario goal completion) breaks ties.
-- 🐉 **Bonus:** teams that integrate **HydraDB** into their agent's architecture
-  earn extra credit (ask organizers for details).
-- Reference baseline on `test_normal`: ReAct + GPT-4o ≈ **48.8 TGC**. Beat it.
+- **TGC** (primary) — % of tasks fully completed. **SGC** breaks ties.
+- 🐉 **Bonus:** HydraDB integration (API-doc retrieval + cross-task memory).
+- Reference baseline on `test_normal`: ReAct + GPT-4o ≈ **48.8 TGC**.
 
 ---
 
