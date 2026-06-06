@@ -53,7 +53,7 @@ def _is_error_output(output: str) -> bool:
 def build_auth_preamble(apps: list[str]) -> str:
     login_apps = [a for a in apps if a in APPS_WITH_LOGIN]
     if not login_apps:
-        login_apps = ["spotify", "venmo", "phone", "gmail", "amazon"]
+        login_apps = sorted(APPS_WITH_LOGIN)
 
     lines = [
         "# Auto-auth preamble: credentials + login tokens",

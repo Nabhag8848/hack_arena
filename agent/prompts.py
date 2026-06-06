@@ -1,3 +1,7 @@
+import re
+
+from agent.config import APP_KEYWORDS
+
 SYSTEM_PROMPT = """You are an autonomous coding agent operating inside AppWorld.
 You complete the supervisor's task by writing Python code that the environment executes.
 
@@ -37,10 +41,10 @@ COMPLETING TASKS (critical):
 SPOTIFY_LIBRARY_PLAYBOOK = """
 SPOTIFY LIBRARY PATTERN (list/count/aggregate tasks):
 - show_song_library, show_album_library, show_liked_songs return a LIST of dicts.
-  Paginate with page_index/page_limit until empty page.
+  Paginate with page_index/page_limit until empty page (use shared paginate helper).
 - Song dicts use song_id (NOT id). Album dicts have song_ids: [int, ...] (NOT nested songs).
 - show_playlist_library returns playlists with playlist_id and song_ids already on each item.
-  There is NO show_playlist_songs API — read song_ids directly from each playlist dict.
+  show_playlist(playlist_id=...) returns nested songs list — different shape from library.
 - For genre, play_count, release year: apis.spotify.show_song(access_token=tok, song_id=...)
   — has release_date (ISO string, NOT release_year). Year = int(song["release_date"][:4]).
 - Collect unique song_ids in a set from song_library, album song_ids, and playlist song_ids.
@@ -50,20 +54,8 @@ SPOTIFY LIBRARY PATTERN (list/count/aggregate tasks):
   complete_task(answer=",".join(titles)) in the same step.
 - QA list answers: comma-separated titles, no spaces after commas unless in title.
 
-WORKING PATTERN (adapt for your task):
+WORKING PATTERN (adapt for your task — paginate defined in TASK-SPECIFIC PLAYBOOK):
 ```python
-def paginate(api_fn, access_token, **kwargs):
-    results, page = [], 0
-    while True:
-        batch = api_fn(access_token=access_token, page_index=page, page_limit=20, **kwargs)
-        if not batch:
-            break
-        results.extend(batch)
-        if len(batch) < 20:
-            break
-        page += 1
-    return results
-
 tok = access_tokens["spotify"]
 song_ids = set()
 for song in paginate(apis.spotify.show_song_library, tok):
@@ -77,17 +69,20 @@ for playlist in paginate(apis.spotify.show_playlist_library, tok):
 
 SPOTIFY_PLAYER_PLAYBOOK = """
 SPOTIFY PLAYER PATTERN (skip/previous/current song tasks):
-- show_current_song returns artists: [{"id": N, "name": "..."}] — NO top-level "artist" key.
-- Helper: artist_names = lambda s: [a["name"] for a in s.get("artists", [])]
-- Loop: while target_artist not in artist_names(current_song): previous_song(); refresh current_song
+- show_current_song returns artists: [{"id": N, "name": "..."}] and title — NO top-level "artist" key.
+- Match target by song title OR artist name from the instruction.
+- Loop: while target not matched: previous_song(); refresh current_song
 - Then complete_task(answer=None). Only spotify.MusicPlayer state should change.
 
 ```python
 tok = access_tokens["spotify"]
-target = "Luna Starlight"  # from instruction
+target = "Luna Starlight"  # song title or artist from instruction
 cur = apis.spotify.show_current_song(access_token=tok)
-names = lambda s: [a["name"] for a in s.get("artists", [])]
-while target not in names(cur):
+def matches(s, t):
+    if t.lower() in s.get("title", "").lower():
+        return True
+    return any(t.lower() in a["name"].lower() for a in s.get("artists", []))
+while not matches(cur, target):
     apis.spotify.previous_song(access_token=tok)
     cur = apis.spotify.show_current_song(access_token=tok)
 apis.supervisor.complete_task(answer=None)
@@ -118,6 +113,233 @@ apis.supervisor.complete_task(answer=None)
 ```
 """
 
+PAGINATE_HELPER = """
+PAGINATION HELPER (reuse across apps — define once per session):
+```python
+def paginate(api_fn, access_token=None, **kwargs):
+    results, page = [], 0
+    while True:
+        call_kwargs = {**kwargs, "page_index": page, "page_limit": 20}
+        if access_token is not None:
+            call_kwargs["access_token"] = access_token
+        batch = api_fn(**call_kwargs)
+        if not batch:
+            break
+        results.extend(batch)
+        if len(batch) < 20:
+            break
+        page += 1
+    return results
+```
+"""
+
+AMAZON_SHOP_PLAYBOOK = """
+AMAZON SHOPPING PATTERN (search, cart, checkout):
+- search_products(query=..., product_type=..., page_index=..., page_limit=...) returns product dicts
+  with product_id, name, price, rating — paginate until you find the right item.
+- show_product(product_id=...) for full details before adding to cart.
+- add_product_to_cart(product_id=..., access_token=atok, quantity=1)
+- place_order requires payment_card_id and address_id from show_payment_cards / show_addresses.
+- apply_promo_code_to_cart(promo_code=..., access_token=atok) before place_order if instructed.
+- Action flow: search → verify product_id → add to cart → place_order → complete_task(answer=None).
+
+```python
+atok = access_tokens["amazon"]
+products = paginate(apis.amazon.search_products, None, query="wireless mouse")  # no token for search
+# OR with token for cart ops:
+cards = apis.amazon.show_payment_cards(access_token=atok)
+addrs = apis.amazon.show_addresses(access_token=atok)
+apis.amazon.add_product_to_cart(access_token=atok, product_id=products[0]["product_id"])
+apis.amazon.place_order(access_token=atok, payment_card_id=cards[0]["payment_card_id"],
+                        address_id=addrs[0]["address_id"])
+apis.supervisor.complete_task(answer=None)
+```
+"""
+
+AMAZON_ORDERS_PLAYBOOK = """
+AMAZON ORDERS PATTERN (history, receipts, returns, QA):
+- show_orders(access_token=atok, query=..., sort_by=...) — paginate for full history.
+- Order dicts have order_id, order_items (list with product_id, ordered_quantity, price),
+  status, created_at, paid_amount — NOT "products".
+- show_order(order_id=..., access_token=atok) for single-order detail.
+- download_order_receipt(order_id=..., access_token=atok, download_to_file_path="~/...",
+  file_system_access_token=fs_tok) — needs file_system login too.
+- initiate_return(order_id=..., product_id=..., deliverer_id=..., quantity=..., access_token=atok)
+- QA ("how many orders", "total spent"): aggregate from paginated show_orders, then complete_task(answer=...).
+
+```python
+atok = access_tokens["amazon"]
+orders = paginate(apis.amazon.show_orders, atok, query="headphones")
+total = sum(
+    item["price"] * item["ordered_quantity"]
+    for o in orders for item in o["order_items"]
+)
+apis.supervisor.complete_task(answer=total)  # QA example
+```
+"""
+
+GMAIL_PLAYBOOK = """
+GMAIL PATTERN (inbox search, read, send, reply):
+- Thread listing APIs (show_inbox_threads, show_outbox_threads, show_archived_threads) return
+  SUMMARIES only — use show_thread(email_thread_id=..., access_token=gtok) for full email bodies.
+- All thread APIs support query, from_email, to_email, label, page_index, page_limit filters.
+- show_email(email_id=..., access_token=gtok) for a single email's body and attachments.
+- send_email(email_addresses=[...], subject=..., body=..., access_token=gtok)
+- reply_to_email(email_thread_id=..., email_id=..., body=..., access_token=gtok)
+- forward_email_from_thread(email_thread_id=..., email_id=..., email_addresses=[...], access_token=gtok)
+- Attachments: download_attachment(attachment_id=..., file_system_access_token=fs_tok,
+  download_to_file_path="~/Downloads/file.pdf", access_token=gtok)
+- search_users(query=...) to resolve names → email addresses (no login needed).
+- QA: read-only thread/email inspection, then complete_task(answer=<value>).
+
+```python
+gtok = access_tokens["gmail"]
+threads = paginate(apis.gmail.show_inbox_threads, gtok, query="invoice")
+thread = apis.gmail.show_thread(access_token=gtok, email_thread_id=threads[0]["email_thread_id"])
+body = thread["emails"][0]["body"]
+apis.gmail.send_email(access_token=gtok, email_addresses=["friend@example.com"],
+                      subject="Re: invoice", body="Here is the info.")
+apis.supervisor.complete_task(answer=None)
+```
+"""
+
+PHONE_PLAYBOOK = """
+PHONE PATTERN (contacts, relationships, texts, alarms):
+- Login uses profile phone_number as username (NOT email) — auth preamble handles this.
+- search_contacts(access_token=ptok, query=..., relationship=...) — relationship filter for
+  "roommates", "parents", "coworkers", etc. Use show_contact_relationships() to list valid values.
+- Contact dicts: first_name, last_name, phone_number, email, relationships (list).
+- search_text_messages(access_token=ptok, query=..., phone_number=...) — parse amounts/requests
+  from message text before acting in other apps.
+- send_text_message(access_token=ptok, phone_number=..., message=...)
+- get_current_date_and_time() — no login needed; use for date-relative tasks.
+- Alarms: show_alarms → create_alarm(time=..., access_token=ptok) / update_alarm / delete_alarm.
+
+```python
+ptok = access_tokens["phone"]
+roommates = apis.phone.search_contacts(access_token=ptok, relationship="roommate")
+for c in roommates:
+    print(c["first_name"], c["phone_number"])
+msgs = apis.phone.search_text_messages(access_token=ptok, query="dinner")
+apis.phone.send_text_message(access_token=ptok, phone_number=roommates[0]["phone_number"],
+                             message="On my way!")
+apis.supervisor.complete_task(answer=None)
+```
+"""
+
+FILE_SYSTEM_PLAYBOOK = """
+FILE SYSTEM PATTERN (read, write, move, compress):
+- All paths use ~/ prefix (e.g. "~/Documents/report.txt", "~/Downloads/").
+- show_directory(access_token=fs_tok, directory_path="~/", recursive=True, entry_type="files")
+- show_file(file_path=..., access_token=fs_tok) returns content and metadata.
+- create_file(file_path=..., content=..., access_token=fs_tok, overwrite=True)
+- update_file(file_path=..., content=..., access_token=fs_tok)
+- move_file / copy_file: source_file_path, destination_file_path, access_token=fs_tok
+- compress_directory(directory_path=..., access_token=fs_tok, compressed_file_path="~/archive.zip")
+- file_exists / directory_exists for checks before read/write.
+- Other apps (gmail, amazon, todoist) may need file_system_access_token when downloading attachments.
+
+```python
+fs_tok = access_tokens["file_system"]
+entries = apis.file_system.show_directory(access_token=fs_tok, directory_path="~/Documents", recursive=True)
+content = apis.file_system.show_file(access_token=fs_tok, file_path="~/Documents/notes.txt")["content"]
+apis.file_system.create_file(access_token=fs_tok, file_path="~/Documents/summary.txt",
+                             content=content[:500], overwrite=True)
+apis.supervisor.complete_task(answer=None)
+```
+"""
+
+SIMPLE_NOTE_PLAYBOOK = """
+SIMPLE NOTE PATTERN (search, read, create, update):
+- search_notes(access_token=ntok, query=..., tags=..., pinned=...) returns note METADATA only
+  (note_id, title, tags) — NO content. Call show_note(note_id=..., access_token=ntok) for content.
+- Note dicts: note_id, title, content, tags (list), pinned (bool).
+- create_note(title=..., content=..., access_token=ntok, tags=[...])
+- update_note(note_id=..., access_token=ntok, title=..., content=..., tags=...)
+- add_content_to_note(note_id=..., append_or_prepend="append"|"prepend", added_content=..., access_token=ntok)
+- QA ("what does my habit note say"): search → show_note → complete_task(answer=extracted_value).
+
+```python
+ntok = access_tokens["simple_note"]
+notes = paginate(apis.simple_note.search_notes, ntok, query="habit")
+note = apis.simple_note.show_note(access_token=ntok, note_id=notes[0]["note_id"])
+apis.supervisor.complete_task(answer=note["content"])  # QA example
+```
+"""
+
+TODOIST_PLAYBOOK = """
+TODOIST PATTERN (projects, tasks, create, complete):
+- show_projects(access_token=ttok, query=..., is_archived=False) → project_id, name.
+- show_sections(project_id=..., access_token=ttok) → section_id (optional grouping).
+- show_tasks(project_id=..., access_token=ttok, is_completed=False, due_today=..., overdue=...)
+  — paginate; task dicts have task_id, title, description, due_date, priority, is_completed.
+- show_task(task_id=..., access_token=ttok) for full detail including subtasks.
+- create_task(project_id=..., title=..., access_token=ttok, due_date=..., priority=..., section_id=...)
+- update_task(task_id=..., access_token=ttok, is_completed=True) to mark done.
+- create_sub_task(task_id=..., title=..., access_token=ttok)
+- QA: count/list tasks with read-only show_tasks, complete_task(answer=...).
+
+```python
+ttok = access_tokens["todoist"]
+projects = apis.todoist.show_projects(access_token=ttok, query="Work")
+pid = projects[0]["project_id"]
+tasks = paginate(apis.todoist.show_tasks, ttok, project_id=pid, is_completed=False)
+apis.todoist.create_task(access_token=ttok, project_id=pid, title="Review PR", due_date="2026-06-10")
+apis.todoist.update_task(access_token=ttok, task_id=tasks[0]["task_id"], is_completed=True)
+apis.supervisor.complete_task(answer=None)
+```
+"""
+
+SPLITWISE_PLAYBOOK = """
+SPLITWISE PATTERN (groups, expenses, balances, settle up):
+- show_groups(access_token=stok) → group_id, name, members.
+- show_group_expenses(group_id=..., access_token=stok, query=...) — paginate for history.
+- show_group_balance(access_token=stok, group_id=...) — who owes whom in a group.
+- show_person_balance(email=..., access_token=stok) — total balance with one person.
+- show_people_balance(access_token=stok) — aggregate across all contacts.
+- record_expense(description=..., paid_amount=..., payer_email=..., debtor_emails=[...],
+  access_token=stok, group_id=..., debt_amounts=[...]) — equal split if debt_amounts omitted.
+- record_payment(payer_email=..., receiver_email=..., amount=..., access_token=stok, group_id=...)
+- settle_up(email=..., access_token=stok, group_id=...) — clear outstanding group balance.
+- search_users(access_token=stok, query=...) to resolve names → emails.
+- QA: read balances/expenses only, complete_task(answer=<amount or count>).
+
+```python
+stok = access_tokens["splitwise"]
+groups = apis.splitwise.show_groups(access_token=stok)
+gid = groups[0]["group_id"]
+balance = apis.splitwise.show_group_balance(access_token=stok, group_id=gid)
+apis.splitwise.record_expense(access_token=stok, group_id=gid, description="Dinner",
+    paid_amount=120.0, payer_email=email,
+    debtor_emails=["friend1@example.com", "friend2@example.com"])
+apis.supervisor.complete_task(answer=None)
+```
+"""
+
+VENMO_PLAYBOOK = """
+VENMO PATTERN (payments, requests, transaction history):
+- Login uses supervisor email as username.
+- search_friends / search_users(access_token=vtok, query=...) → email (NOT user_id).
+- create_transaction(access_token=vtok, receiver_email=..., amount=..., description=...)
+  — amount must be a float, NEVER None.
+- create_payment_request(user_email=..., amount=..., access_token=vtok, description=...)
+- show_received_payment_requests(access_token=vtok, status="pending") → approve/deny.
+- approve_payment_request(payment_request_id=..., access_token=vtok, payment_card_id=...)
+- show_transactions(access_token=vtok, query=..., min_amount=..., max_amount=..., direction=...)
+  — paginate for QA aggregation tasks.
+- show_venmo_balance(access_token=vtok) for balance QA.
+- Friend dicts: {first_name, last_name, email} — use email for all payment APIs.
+
+```python
+vtok = access_tokens["venmo"]
+friends = apis.venmo.search_friends(access_token=vtok, query="Alex")
+receiver = friends[0]["email"]
+apis.venmo.create_transaction(access_token=vtok, receiver_email=receiver,
+                              amount=25.0, description="Lunch")
+apis.supervisor.complete_task(answer=None)
+```
+"""
+
 PLANNER_PROMPT = """Analyze this AppWorld task and output a JSON plan only (no markdown):
 {
   "task_type": "qa" or "action",
@@ -141,27 +363,100 @@ REFLECT_PROMPT = """The previous code execution failed or returned an unexpected
 Analyze the error output carefully. Check the API documentation for correct parameter
 names and required fields. Write corrected code in a single python block."""
 
+MAX_PLAYBOOK_CHARS = 4500
+MAX_PLAYBOOK_APPS = 3
 
-def _task_playbooks(plan: dict) -> str:
-    apps = set(plan.get("likely_apps", []))
+_DATA_APPS = frozenset({
+    "spotify", "amazon", "gmail", "phone", "simple_note", "todoist", "splitwise", "venmo",
+})
+
+
+def _score_app(app: str, instruction: str) -> int:
+    score = 0
+    for kw in APP_KEYWORDS.get(app, []):
+        if _matches_keyword(instruction, kw):
+            score += 3 if " " in kw else 1
+    return score
+
+
+def _matches_keyword(text: str, keyword: str) -> bool:
+    if keyword.startswith("~/") or " " in keyword:
+        return keyword in text
+    return bool(re.search(rf"\b{re.escape(keyword)}\b", text))
+
+
+def _ranked_apps(plan: dict) -> list[str]:
     instruction = plan.get("_instruction", "").lower()
-    parts: list[str] = []
+    apps = list(plan.get("likely_apps", []))
+    return sorted(apps, key=lambda a: _score_app(a, instruction), reverse=True)
 
-    if "spotify" in apps:
+
+def _playbooks_for_app(app: str, apps: set[str], instruction: str) -> list[str]:
+    parts: list[str] = []
+    if app == "spotify":
         if any(w in instruction for w in (
             "previous", "next song", "reach a song", "until you reach", "skip", "player",
         )):
             parts.append(SPOTIFY_PLAYER_PLAYBOOK)
-        elif any(w in instruction for w in (
-            "song", "playlist", "album", "genre", "liked", "library", "how many", "top",
-            "comma-separated", "comma separated", "list of", "give me", "released",
-        )):
+        else:
             parts.append(SPOTIFY_LIBRARY_PLAYBOOK)
+    elif app == "amazon":
+        if any(w in instruction for w in (
+            "order", "return", "delivered", "receipt", "purchase history", "past order",
+            "how many order", "shipped",
+        )):
+            parts.append(AMAZON_ORDERS_PLAYBOOK)
+        else:
+            parts.append(AMAZON_SHOP_PLAYBOOK)
+    elif app == "gmail":
+        parts.append(GMAIL_PLAYBOOK)
+    elif app == "venmo":
+        venmo_phone = (
+            "phone" in apps
+            and any(w in instruction for w in (
+                "pay", "payment", "venmo", "text", "message", "money", "$", "transaction",
+            ))
+        )
+        if venmo_phone:
+            parts.append(VENMO_PHONE_PLAYBOOK)
+        else:
+            parts.append(VENMO_PLAYBOOK)
+    elif app == "phone":
+        venmo_phone = (
+            "venmo" in apps
+            and any(w in instruction for w in (
+                "pay", "payment", "venmo", "text", "message", "money", "$", "transaction",
+            ))
+        )
+        if not venmo_phone:
+            parts.append(PHONE_PLAYBOOK)
+    elif app == "file_system":
+        parts.append(FILE_SYSTEM_PLAYBOOK)
+    elif app == "simple_note":
+        parts.append(SIMPLE_NOTE_PLAYBOOK)
+    elif app == "todoist":
+        parts.append(TODOIST_PLAYBOOK)
+    elif app == "splitwise":
+        parts.append(SPLITWISE_PLAYBOOK)
+    return parts
 
-    if "venmo" in apps and "phone" in apps:
-        parts.append(VENMO_PHONE_PLAYBOOK)
 
-    return "\n".join(parts)
+def _task_playbooks(plan: dict) -> str:
+    instruction = plan.get("_instruction", "").lower()
+    all_apps = set(plan.get("likely_apps", []))
+    ranked = _ranked_apps(plan)[:MAX_PLAYBOOK_APPS]
+
+    parts: list[str] = []
+    if all_apps & _DATA_APPS:
+        parts.append(PAGINATE_HELPER)
+
+    for app in ranked:
+        parts.extend(_playbooks_for_app(app, all_apps, instruction))
+
+    result = "\n".join(p for p in parts if p)
+    if len(result) > MAX_PLAYBOOK_CHARS:
+        result = result[:MAX_PLAYBOOK_CHARS] + "\n... (playbook truncated)"
+    return result
 
 
 def build_system_prompt(
@@ -223,11 +518,19 @@ def completion_guard_prompt(plan: dict, steps_remaining: int) -> str:
 
 def precision_reminder(plan: dict) -> str:
     """Injected periodically for action tasks involving payments or IDs."""
+    if plan.get("task_type") == "qa":
+        return (
+            "Reminder: QA task — read-only API calls only. "
+            "Call complete_task(answer=<computed value>) when ready."
+        )
     apps = set(plan.get("likely_apps", []))
-    if not apps.intersection({"venmo", "phone", "gmail", "spotify"}):
+    if not apps.intersection({
+        "venmo", "phone", "gmail", "spotify", "amazon", "splitwise",
+        "todoist", "file_system", "simple_note",
+    }):
         return ""
     return (
         "Reminder: print API results before writes. "
-        "Use exact amounts from phone texts. "
+        "Use exact amounts from phone texts, emails, or notes. "
         "Action tasks: complete_task(answer=None) only."
     )

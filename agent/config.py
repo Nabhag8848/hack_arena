@@ -57,15 +57,15 @@ APPS_WITH_LOGIN = {
 }
 
 APP_KEYWORDS: dict[str, list[str]] = {
-    "amazon": ["amazon", "order", "cart", "product", "shopping", "delivery", "purchase"],
+    "amazon": ["amazon", "cart", "product", "shopping", "delivery", "purchase", "checkout", "prime"],
     "spotify": ["spotify", "song", "playlist", "album", "artist", "music", "player"],
-    "venmo": ["venmo", "payment", "friend", "transfer", "money", "pay", "request"],
-    "gmail": ["gmail", "email", "mail", "inbox", "attachment", "send"],
-    "phone": ["phone", "contact", "roommate", "coworker", "parent", "friend", "call"],
-    "file_system": ["file", "folder", "directory", "path", "~/", "zip", "download", "upload"],
-    "simple_note": ["simple note", "simplenote", "note", "habit", "log", "tracking"],
+    "venmo": ["venmo", "venmo payment", "payment request"],
+    "gmail": ["gmail", "email", "inbox", "attachment", "mail thread", "send email"],
+    "phone": ["phone", "text message", "texting", "roommate", "coworker", "parent", "call"],
+    "file_system": ["file system", "folder", "directory", "path", "~/", "zip", "download", "upload"],
+    "simple_note": ["simple note", "simplenote", "habit", "tracking"],
     "todoist": ["todoist", "project", "task", "todo", "subtask"],
-    "splitwise": ["splitwise", "expense", "split", "group", "owe"],
+    "splitwise": ["splitwise", "split the bill", "settle up", "splitwise expense"],
 }
 
 

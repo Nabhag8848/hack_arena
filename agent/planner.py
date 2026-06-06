@@ -12,34 +12,70 @@ QA_PATTERNS = re.compile(
     re.I,
 )
 
+QA_EXTRA_PATTERNS = [
+    re.compile(r"\bhow much (?:do )?i owe\b", re.I),
+    re.compile(r"\bfind out\b", re.I),
+    re.compile(r"\bfigure out\b", re.I),
+    re.compile(r"\btell me (?:what|how|which|the)\b", re.I),
+    re.compile(r"\bcalculate\b", re.I),
+    re.compile(r"\bdetermine\b", re.I),
+]
+
+
+def _matches_keyword(text: str, keyword: str) -> bool:
+    """Match whole words/phrases; avoid substring traps like 'expense' in 'expenses'."""
+    if keyword.startswith("~/") or " " in keyword:
+        return keyword in text
+    return bool(re.search(rf"\b{re.escape(keyword)}\b", text))
+
 
 def detect_apps(instruction: str) -> list[str]:
     text = instruction.lower()
     found: list[str] = []
     for app, keywords in APP_KEYWORDS.items():
-        if any(kw in text for kw in keywords):
+        if any(_matches_keyword(text, kw) for kw in keywords):
             found.append(app)
     relational = [
-        "roommate", "coworker", "parent", "friend", "contact",
+        "roommate", "coworker", "parent", "contact",
         "brother", "sister", "wife", "husband", "family",
     ]
-    if any(r in text for r in relational) and "phone" not in found:
+    if any(_matches_keyword(text, r) for r in relational) and "phone" not in found:
         found.append("phone")
+    # Bare "note" for simple_note — exclude todoist/file contexts
+    if _matches_keyword(text, "note") and "simple note" not in text and "simplenote" not in text:
+        if "todoist" not in found and "to my file" not in text and "to the file" not in text:
+            if "simple_note" not in found:
+                found.append("simple_note")
+    # file_system when file/path context appears
+    if "file_system" not in found:
+        if any(x in text for x in ("~/", "directory", "folder", "path", "zip", "download", "upload", "compress")):
+            found.append("file_system")
+        elif any(x in text for x in ("to my file", "to the file", "in my file", "the file at")):
+            found.append("file_system")
+        elif _matches_keyword(text, "file") and _matches_keyword(text, "note"):
+            found.append("file_system")
+    # Payment verbs → venmo only when splitwise not named
+    if _matches_keyword(text, "pay") and "venmo" not in found and "splitwise" not in found:
+        if any(_matches_keyword(text, w) for w in ("venmo", "friend", "transfer", "money")):
+            found.append("venmo")
     return found
 
 
 def classify_task_type(instruction: str) -> str:
     stripped = instruction.strip()
+    lower = stripped.lower()
     if QA_PATTERNS.search(stripped):
+        return "qa"
+    if any(p.search(lower) for p in QA_EXTRA_PATTERNS):
         return "qa"
     action_verbs = [
         "send", "pay", "create", "delete", "remove", "add", "update",
         "befriend", "unfriend", "order", "buy", "mark", "complete",
         "transfer", "request", "share", "upload", "download", "zip",
         "invite", "set", "start", "stop", "play", "like", "unlike",
+        "record", "compress", "move", "copy",
         "please do", "do them", "do it",
     ]
-    lower = stripped.lower()
     if any(v in lower for v in action_verbs):
         return "action"
     if stripped.endswith("?"):

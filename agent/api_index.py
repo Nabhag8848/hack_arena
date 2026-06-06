@@ -7,22 +7,32 @@ from pathlib import Path
 from agent.config import API_DOCS_DIR, MAX_RETRIEVED_APIS
 
 ESSENTIAL_APIS: dict[str, list[str]] = {
-    "amazon": ["login", "show_orders", "show_products", "add_to_cart", "checkout"],
+    "amazon": [
+        "login", "search_products", "add_product_to_cart", "place_order", "show_orders",
+    ],
     "spotify": [
         "login", "show_song", "show_song_library", "show_album_library",
         "show_liked_songs", "show_playlist_library", "show_playlist",
         "show_current_song", "previous_song", "show_account",
     ],
     "venmo": [
-        "login", "show_transactions", "show_friends", "search_friends",
+        "login", "show_transactions", "search_friends",
         "search_users", "create_transaction",
     ],
-    "gmail": ["login", "show_inbox", "send_email", "search_emails", "show_email"],
-    "phone": ["login", "show_contacts", "search_contacts", "search_text_messages", "send_text_message"],
-    "file_system": ["login", "show_directory", "show_file", "create_directory", "compress_files"],
-    "simple_note": ["login", "show_notes", "search_notes", "show_note"],
+    "gmail": [
+        "login", "show_inbox_threads", "show_thread", "send_email", "show_email",
+    ],
+    "phone": [
+        "login", "search_contacts", "search_text_messages", "send_text_message",
+    ],
+    "file_system": [
+        "login", "show_directory", "show_file", "create_directory", "compress_directory",
+    ],
+    "simple_note": ["login", "search_notes", "show_note"],
     "todoist": ["login", "show_projects", "show_tasks", "create_task", "update_task"],
-    "splitwise": ["login", "show_groups", "show_expenses", "create_expense"],
+    "splitwise": [
+        "login", "show_groups", "show_group_expenses", "record_expense", "show_group_balance",
+    ],
     "supervisor": ["show_account_passwords", "show_profile", "complete_task"],
 }
 
