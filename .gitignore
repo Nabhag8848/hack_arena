@@ -3,6 +3,8 @@
 
 # Python
 .venv/
+.ipython/
+.hydradb_seeded
 __pycache__/
 *.pyc
 *.pyo

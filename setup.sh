@@ -29,10 +29,10 @@ cat <<'NEXT'
 
 ✅ Setup done. Next:
   source .venv/bin/activate
-  # put your key in .env  ->  OPENAI_API_KEY=sk-...
-  export APPWORLD_EXPERIMENT=team_<yourname>
-  export APPWORLD_DATASET=dev MAX_TASKS=2     # quick smoke before the full run
-  python agent.py
+  # Edit .env — set GROQ_API_KEY, APPWORLD_EXPERIMENT=team_<yourname>, HYDRA_DB_API_KEY (optional)
+  python agent.py                              # reads all settings from .env
 
-Explore tasks interactively:  appworld play
+Explore tasks interactively:
+  export IPYTHONDIR="$(pwd)/.ipython"          # same path agent.py uses
+  appworld play
 NEXT

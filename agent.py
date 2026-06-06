@@ -1,130 +1,114 @@
 """
-://agent_arena — AppWorld starter agent (ReAct code agent).
+://agent_arena — AppWorld PRER agent (Plan-Retrieve-Execute-Reflect).
 
-This is a WORKING template you can hack on. The loop and every AppWorld API
-call below were verified against appworld==0.1.3. Your job is to make the agent
-smarter: better prompting, planning, error recovery, retrieval, etc.
-
-How AppWorld works (the rules your agent plays by):
-  - Each task gives you a natural-language instruction from your "supervisor".
-  - You act by writing PYTHON code. The env runs it and returns whatever you
-    print(). A preloaded object `apis` is your only interface to the 9 apps.
-  - Discover APIs at runtime:
-        apis.api_docs.show_app_descriptions()
-        apis.api_docs.show_api_descriptions(app_name='spotify')
-        apis.api_docs.show_api_doc(app_name='spotify', api_name='login')
-  - Get credentials to log into apps:
-        apis.supervisor.show_account_passwords()
-    (most app APIs need an access_token returned by that app's `login`).
-  - Finish with:
-        apis.supervisor.complete_task(answer=<answer or None>)
-    Pass `answer` only when the task asks a question; otherwise leave it None.
-
-Run:
-  export OPENAI_API_KEY=sk-...                 # or put it in .env
-  export APPWORLD_EXPERIMENT=team_<yourname>   # your unique team id
-  export APPWORLD_DATASET=dev                  # dev while building; switch to the
-                                               # official split at submission time
+Run (all settings via .env or env vars — see .env.example):
+  source .venv/bin/activate
   python agent.py
 """
 
-import os
-import re
+import sys
+import time
 
-try:  # optional: load OPENAI_API_KEY etc. from a local .env
-    from dotenv import load_dotenv
-    load_dotenv()
-except Exception:
-    pass
+import agent.config  # noqa: F401 — loads .env, sets IPYTHONDIR, creates runtime dirs
 
 from appworld import AppWorld, load_task_ids
-from openai import OpenAI
 
-# ---- config ---------------------------------------------------------------
-MODEL = os.environ.get("MODEL", "gpt-4o")                    # or gpt-4.1, gpt-4o-mini, …
-DATASET = os.environ.get("APPWORLD_DATASET", "dev")          # dev | test_normal | test_challenge
-EXPERIMENT = os.environ.get("APPWORLD_EXPERIMENT", "team_demo")
-MAX_INTERACTIONS = int(os.environ.get("MAX_INTERACTIONS", "30"))
-MAX_TASKS = int(os.environ.get("MAX_TASKS", "0"))            # 0 = all tasks in split
-
-client = OpenAI()  # reads OPENAI_API_KEY
-
-SYSTEM_PROMPT = """You are an autonomous coding agent operating inside AppWorld.
-You complete the supervisor's task by writing Python code that the environment executes.
-
-RULES:
-- Reply with EXACTLY ONE Python code block per turn, nothing else:
-  ```python
-  # your code
-  ```
-- A preloaded object `apis` is the ONLY way to interact with the apps. Whatever
-  you print() is returned to you as the next observation.
-- You do NOT know the APIs in advance. Discover them at runtime:
-    print(apis.api_docs.show_app_descriptions())
-    print(apis.api_docs.show_api_descriptions(app_name='<app>'))
-    print(apis.api_docs.show_api_doc(app_name='<app>', api_name='<api>'))
-- To act on the supervisor's accounts, get credentials and log in:
-    print(apis.supervisor.show_account_passwords())
-    # then call that app's login API to get an access_token, and pass it onward.
-- Work in small steps: inspect results before the next action. Never invent API
-  names or fields — look them up first.
-- When and ONLY when the task is fully done, call:
-    apis.supervisor.complete_task(answer=<answer>)   # answer=None if not a question
-"""
+from agent.api_index import get_api_index
+from agent.config import (
+    APPWORLD_DATASET,
+    APPWORLD_EXPERIMENT,
+    EXPERIMENTS_OUTPUT_DIR,
+    MAX_TASKS,
+    MODEL,
+    SKIP_COMPLETED,
+    validate_llm_config,
+)
+from agent.hydradb_ctx import get_hydra_context
+from agent.loop import solve
 
 
-def call_llm(messages: list[dict]) -> str:
-    resp = client.chat.completions.create(
-        model=MODEL,
-        messages=[{"role": "system", "content": SYSTEM_PROMPT}, *messages],
-        max_tokens=1500,
-        temperature=0.0,
+def _task_already_completed(task_id: str) -> bool:
+    log_path = (
+        EXPERIMENTS_OUTPUT_DIR
+        / APPWORLD_EXPERIMENT
+        / "tasks"
+        / task_id
+        / "logs"
+        / "environment_io.md"
     )
-    return resp.choices[0].message.content or ""
-
-
-def extract_code(text: str) -> str:
-    m = re.search(r"```(?:python)?\s*\n(.*?)```", text, re.S)
-    return m.group(1).strip() if m else text.strip()
-
-
-def solve(world: AppWorld) -> None:
-    messages = [{
-        "role": "user",
-        "content": (
-            f"Supervisor: {world.task.supervisor}\n\n"
-            f"Task: {world.task.instruction}\n\n"
-            "Begin. Remember: one python code block per turn."
-        ),
-    }]
-    for step in range(MAX_INTERACTIONS):
-        reply = call_llm(messages)
-        code = extract_code(reply)
-        output = world.execute(code)
-        print(f"  step {step+1}: ran {len(code)} chars -> {str(output)[:120]!r}")
-        messages.append({"role": "assistant", "content": reply})
-        messages.append({"role": "user", "content": f"Execution output:\n{output}"})
-        if world.task_completed():
-            print("  ✓ task_completed")
-            return
-    print("  ✗ hit MAX_INTERACTIONS without completion")
+    if not log_path.exists():
+        return False
+    text = log_path.read_text()
+    if "Marked the active task complete" in text:
+        return True
+    blocks = text.split("### Environment Interaction")
+    if len(blocks) < 2:
+        return False
+    last = blocks[-1]
+    return "complete_task" in last and "Execution successful" in last
 
 
 def main() -> None:
-    task_ids = load_task_ids(DATASET)
+    print("Starting agent...", flush=True)
+    validate_llm_config()
+
+    print("Loading API index...", flush=True)
+    api_index = get_api_index()
+    print(f"API index loaded: {len(api_index.docs)} endpoints", flush=True)
+
+    print("Initializing HydraDB...", flush=True)
+    hydra = get_hydra_context()
+    if hydra.enabled:
+        print(f"HydraDB enabled (tenant: {hydra.tenant_id}, ingest-only mode)")
+        hydra.seed_knowledge()
+    else:
+        print("HydraDB disabled — using local API index only")
+
+    task_ids = load_task_ids(APPWORLD_DATASET)
     if MAX_TASKS:
         task_ids = task_ids[:MAX_TASKS]
-    print(f"Running '{EXPERIMENT}' on {len(task_ids)} '{DATASET}' tasks with {MODEL}")
+
+    print(
+        f"Running '{APPWORLD_EXPERIMENT}' on {len(task_ids)} "
+        f"'{APPWORLD_DATASET}' tasks with groq/{MODEL}"
+    )
+    if SKIP_COMPLETED:
+        print("SKIP_COMPLETED=1 — resuming past finished tasks", flush=True)
+
+    completed = 0
+    skipped = 0
     for i, task_id in enumerate(task_ids, 1):
-        print(f"[{i}/{len(task_ids)}] {task_id}")
-        with AppWorld(task_id=task_id, experiment_name=EXPERIMENT) as world:
-            try:
-                solve(world)
-            except Exception as e:  # never let one task kill the whole run
-                print(f"  ! error: {e}")
-    print(f"\nDone. Outputs in ./experiments/outputs/{EXPERIMENT}/")
+        if SKIP_COMPLETED and _task_already_completed(task_id):
+            print(f"[{i}/{len(task_ids)}] {task_id} — skip (already done)", flush=True)
+            completed += 1
+            skipped += 1
+            continue
+
+        print(f"[{i}/{len(task_ids)}] {task_id}", flush=True)
+        print("  opening AppWorld...", flush=True)
+        try:
+            with AppWorld(task_id=task_id, experiment_name=APPWORLD_EXPERIMENT) as world:
+                if solve(world):
+                    completed += 1
+        except RuntimeError as e:
+            if "daily token limit" in str(e).lower():
+                print(f"  ! stopping run: {e}", flush=True)
+                break
+            print(f"  ! error: {e}")
+        except Exception as e:
+            print(f"  ! error: {e}")
+        time.sleep(2)
+
+    ran = len(task_ids) - skipped
+    output_dir = EXPERIMENTS_OUTPUT_DIR / APPWORLD_EXPERIMENT
+    print(f"\nCompleted {completed}/{len(task_ids)} tasks ({skipped} skipped, {ran} attempted)")
+    print(f"Outputs in {output_dir}/")
     print("Hand that folder to the organizers (or zip and submit per instructions).")
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except RuntimeError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        sys.exit(1)
