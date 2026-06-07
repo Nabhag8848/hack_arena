@@ -1,24 +1,14 @@
 ──────────────────────────────── Overall Stats ─────────────────────────────────
-Num Passed Tests : 1
-Num Failed Tests : 8
+Num Passed Tests : 2
+Num Failed Tests : 7
 Num Total  Tests : 9
 ──────────────────────────────────── Passes ────────────────────────────────────
+>> Passed Requirement
+assert answers match.
 >> Passed Requirement
 assert 0 records have been updated or deleted from amazon.Address using
 models.changed_records.
 ──────────────────────────────────── Fails ─────────────────────────────────────
->> Failed Requirement
-assert answers match.
-```python
-with test(
-    """
-    assert answers match.
-    """
-):
-    test.answer(predicted_answer, ground_truth_answer)
-```
-----------
-AssertionError:  '<<not_given>>' == 'null'
 >> Failed Requirement
 assert model changes match
 amazon.Product, amazon.Order, amazon.OrderItem,
@@ -39,14 +29,14 @@ with test(
 AssertionError:
 set()
 ==
-{'gmail.UserEmailThread', 'gmail.Attachment', 'amazon.Order',
-'gmail.GlobalEmailThread', 'amazon.OrderItem', 'amazon.Product',
-'file_system.File', 'file_system.Directory', 'gmail.Email'}
+{'file_system.File', 'gmail.Attachment', 'gmail.GlobalEmailThread',
+'gmail.UserEmailThread', 'amazon.Order', 'gmail.Email', 'file_system.Directory',
+'amazon.OrderItem', 'amazon.Product'}
 
 In right but not left:
-['gmail.UserEmailThread', 'gmail.Attachment', 'amazon.Order',
-'gmail.GlobalEmailThread', 'amazon.OrderItem', 'amazon.Product',
-'file_system.File', 'file_system.Directory', 'gmail.Email']
+['file_system.File', 'gmail.Attachment', 'gmail.GlobalEmailThread',
+'gmail.UserEmailThread', 'amazon.Order', 'gmail.Email', 'file_system.Directory',
+'amazon.OrderItem', 'amazon.Product']
 >> Failed Requirement
 assert there is >= 1 added record in amazon.Order.
 ```python

@@ -8,23 +8,23 @@ right — mismatches slow down or break scoring.
 
 Copy these into the Google Form (update **TGC / SGC** after `bash run.sh submit`):
 
-| Field                       | What to enter                                                |
-| --------------------------- | ------------------------------------------------------------ |
-| **Team name**               | `nabhag`                                                     |
-| **GitHub repo URL**         | `https://github.com/Nabhag8848/hack_arena`                   |
-| **Model used**              | `meta-llama/llama-3.3-70b-instruct:free`                     |
-| **Self-reported TGC / SGC** | _TBD — run `appworld evaluate team_nabhag agent_arena_eval`_ |
-| **HydraDB used?**           | `yes — API-doc retrieval + cross-task memory`                |
-| **Integrity check**         | `confirmed`                                                  |
+| Field                       | What to enter                                      |
+| --------------------------- | -------------------------------------------------- |
+| **Team name**               | `nabhag`                                           |
+| **GitHub repo URL**         | `https://github.com/Nabhag8848/hack_arena`         |
+| **Model used**              | `meta-llama/llama-3.3-70b-instruct:free`           |
+| **Self-reported TGC / SGC** | `20% / 20%` (2/10 tasks: `ba46d91_2`, `dbc0276_3`) |
+| **HydraDB used?**           | `yes — API-doc retrieval + cross-task memory`      |
+| **Integrity check**         | `confirmed`                                        |
 
 ## A. Fields the Google Form asks for
 
 | Field                       | What to enter                                                                | Example (team_nabhag)                         |
 | --------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------- |
 | **Team name**               | lowercase letters/digits/underscores only, no spaces. This is your `<name>`. | `nabhag`                                      |
-| **GitHub repo URL**         |    | `https://github.com/Nabhag8848/hack_arena`    |
+| **GitHub repo URL**         |                                                                              | `https://github.com/Nabhag8848/hack_arena`    |
 | **Model used**              | the `provider/model` you ran                                                 | `meta-llama/llama-3.3-70b-instruct:free`      |
-| **Self-reported TGC / SGC** | from your own `appworld evaluate` (see below)                                | _fill after evaluate_                         |
+| **Self-reported TGC / SGC** | from your own `appworld evaluate` (see below)                                | `20% / 20%`                                   |
 | **HydraDB used?**           | yes/no + one line on how (for the bonus)                                     | `yes — API-doc retrieval + cross-task memory` |
 | **Integrity check**         | confirm: general agent, no `task_id` hardcoding                              | `confirmed`                                   |
 

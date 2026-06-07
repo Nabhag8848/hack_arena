@@ -1,1 +1,8 @@
-{}
+{
+    "amazon": {
+        "CartEntry": 18
+    },
+    "supervisor": {
+        "Task": 1
+    }
+}

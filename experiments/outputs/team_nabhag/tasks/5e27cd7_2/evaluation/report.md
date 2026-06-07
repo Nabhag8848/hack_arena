@@ -6,25 +6,25 @@ Num Total  Tests : 4
 >> Passed Requirement
 assert answers match.
 >> Passed Requirement
-assert model changes match gmail.Draft.
-──────────────────────────────────── Fails ─────────────────────────────────────
->> Failed Requirement
 obtain added, updated, deleted gmail.Draft records using models.changed_records,
 and assert 0 have been updated or added.
+──────────────────────────────────── Fails ─────────────────────────────────────
+>> Failed Requirement
+assert model changes match gmail.Draft.
 ```python
 with test(
     """
-    obtain added, updated, deleted gmail.Draft records using
-models.changed_records,
-    and assert 0 have been updated or added.
+    assert model changes match gmail.Draft.
     """
 ):
-    added_drafts, updated_drafts, deleted_drafts =
-models.changed_records("gmail.Draft")
-    test.case(len(added_drafts), "==", 0)
+    changed_model_names = models.changed_model_names()
+    test.case(changed_model_names, "==", {"gmail.Draft"})
 ```
 ----------
-AssertionError:  4 == 0
+AssertionError:  set() == {'gmail.Draft'}
+
+In right but not left:
+['gmail.Draft']
 >> Failed Requirement
 if public_data.operation is "and",
 assert private_data.empty_subject_and_body_draft_ids match the deleted draft IDs

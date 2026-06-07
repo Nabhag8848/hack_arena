@@ -12,7 +12,3 @@
 ["INSERT INTO cart_entries (record_hash, user_id, product_id, quantity, gift_wrap_quantity) VALUES (?, ?, ?, ?, ?)",["XSrk9V8gbL0=",35,1497,1,0],false]
 ["INSERT INTO cart_entries (record_hash, user_id, product_id, quantity, gift_wrap_quantity) VALUES (?, ?, ?, ?, ?)",["8tG+rL6XS0g=",35,2127,1,0],false]
 ["UPDATE order_items SET record_hash=?, delivered_at=? WHERE order_items.id = ?",["+5F9gX8nUxM=","2023-04-20 18:32:29.000000",7914],false]
-["INSERT INTO cart_entries (record_hash, user_id, product_id, quantity, gift_wrap_quantity) VALUES (?, ?, ?, ?, ?)",["lFp6o4NUycM=",35,1403,1,0],false]
-["UPDATE cart_entries SET record_hash=?, quantity=? WHERE cart_entries.id = ?",["YGzV4TUHI1M=",2,8333],false]
-["UPDATE cart_entries SET record_hash=?, quantity=? WHERE cart_entries.id = ?",["imxxz/B4pi4=",3,8333],false]
-["UPDATE cart_entries SET record_hash=?, quantity=? WHERE cart_entries.id = ?",["4TF79iBJj7Y=",4,8333],false]
